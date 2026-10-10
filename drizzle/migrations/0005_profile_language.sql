@@ -1,1 +1,0 @@
-ALTER TABLE public.profiles ADD COLUMN language text NOT NULL DEFAULT 'en' CHECK (language IN ('en','th'));
