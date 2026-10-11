@@ -209,6 +209,96 @@ export type Database = {
           },
         ]
       }
+      broker_positions: {
+        Row: {
+          account_id: string
+          broker_symbol: string
+          broker_ticket: string
+          canonical_symbol: string
+          closed_at: string | null
+          comment: string | null
+          created_at: string
+          current_price: number | null
+          direction: string
+          id: string
+          last_seen_at: string
+          open_price: number
+          opened_at: string | null
+          order_id: string | null
+          origin: string
+          profit: number | null
+          status: string
+          stop_loss: number | null
+          swap: number | null
+          take_profit: number | null
+          user_id: string
+          volume: number
+        }
+        Insert: {
+          account_id: string
+          broker_symbol: string
+          broker_ticket: string
+          canonical_symbol: string
+          closed_at?: string | null
+          comment?: string | null
+          created_at?: string
+          current_price?: number | null
+          direction: string
+          id?: string
+          last_seen_at?: string
+          open_price: number
+          opened_at?: string | null
+          order_id?: string | null
+          origin?: string
+          profit?: number | null
+          status?: string
+          stop_loss?: number | null
+          swap?: number | null
+          take_profit?: number | null
+          user_id: string
+          volume: number
+        }
+        Update: {
+          account_id?: string
+          broker_symbol?: string
+          broker_ticket?: string
+          canonical_symbol?: string
+          closed_at?: string | null
+          comment?: string | null
+          created_at?: string
+          current_price?: number | null
+          direction?: string
+          id?: string
+          last_seen_at?: string
+          open_price?: number
+          opened_at?: string | null
+          order_id?: string | null
+          origin?: string
+          profit?: number | null
+          status?: string
+          stop_loss?: number | null
+          swap?: number | null
+          take_profit?: number | null
+          user_id?: string
+          volume?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "broker_positions_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "broker_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "broker_positions_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "execution_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       brokers: {
         Row: {
           code: string

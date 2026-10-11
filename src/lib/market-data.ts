@@ -68,6 +68,26 @@ export const ingestSchema = z.object({
     )
     .max(50)
     .default([]),
+  // Omitted by EA < v0.3: then the server does not reconcile (never closes positions it cannot see).
+  positions: z
+    .array(
+      z.object({
+        ticket: z.string().regex(/^[0-9]{1,20}$/),
+        symbol: z.string().regex(/^[A-Za-z0-9_.#]{1,16}$/),
+        type: z.enum(["BUY", "SELL"]),
+        volume: z.number().positive().max(10_000),
+        open_price: z.number().positive(),
+        price: z.number().nonnegative().optional(),
+        sl: z.number().nonnegative(),
+        tp: z.number().nonnegative(),
+        swap: z.number().finite(),
+        profit: z.number().finite(),
+        comment: z.string().max(64).default(""),
+        open_time: z.string().datetime({ offset: true }),
+      }),
+    )
+    .max(100)
+    .optional(),
 });
 
 export const healthQuery = (userId: string) =>
