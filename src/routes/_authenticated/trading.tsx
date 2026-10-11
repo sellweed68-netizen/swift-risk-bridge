@@ -1,3 +1,4 @@
+import { PositionsPanel } from "@/components/positions-panel";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -89,6 +90,8 @@ function TradingPage() {
         {hasUnknown && <Notice tone="danger">{t("tr.unknownNote")}</Notice>}
         <Notice>{t("tr.eaNote")}</Notice>
       </div>
+
+      {uid && <PositionsPanel userId={uid} />}
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">{t("tr.pending")}</h2>
