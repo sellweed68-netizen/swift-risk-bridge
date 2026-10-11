@@ -1,12 +1,12 @@
 //+------------------------------------------------------------------+
-//| NexoraBridge.mq5 — NEXORA MT5 execution bridge (v0.2)          |
+//| NexoraBridge.mq5 — NEXORA MT5 execution bridge (v0.3)          |
 //| Sends heartbeat, account snapshot and quotes to NEXORA MT5.       |
 //| Execution is OFF unless InpExecute=true. Orders come only from    |
 //| NEXORA approvals; the EA never resends an unclear order.          |
 //| Your MT5 password is never read or sent.                          |
 //+------------------------------------------------------------------+
 #property copyright "NEXORA MT5"
-#property version   "0.20"
+#property version   "0.30"
 #include <Trade/Trade.mqh>
 #property strict
 
@@ -16,7 +16,7 @@ input string InpSymbols  = "XAUUSD";                                  // Broker 
 input int    InpSeconds  = 5;                                         // Report interval (seconds, 2-60)
 input bool   InpExecute  = false;                                     // Execute NEXORA-approved orders (off = report-only)
 
-#define EA_VERSION "0.2.0"
+#define EA_VERSION "0.3.0"
 string g_symbols[];
 int    g_fail = 0;
 
@@ -50,6 +50,31 @@ string Iso(datetime t)
 string Num(double v, int digits) { return DoubleToString(v, digits); }
 string Bool(bool b) { return b ? "true" : "false"; }
 
+// Open positions snapshot (read-only; the EA never modifies or closes them here).
+string Positions()
+{
+   string out = "";
+   int n = MathMin(PositionsTotal(), 100);
+   for(int i = 0; i < n; i++)
+   {
+      ulong tk = PositionGetTicket(i);
+      if(tk == 0 || !PositionSelectByTicket(tk)) continue;
+      string sym = PositionGetString(POSITION_SYMBOL);
+      int digits = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
+      string cm = PositionGetString(POSITION_COMMENT);
+      StringReplace(cm, "\\", ""); StringReplace(cm, "\"", "");
+      if(out != "") out += ",";
+      out += StringFormat("{\"ticket\":\"%I64u\",\"symbol\":\"%s\",\"type\":\"%s\",\"volume\":%s,\"open_price\":%s,\"price\":%s,"
+                          "\"sl\":%s,\"tp\":%s,\"swap\":%s,\"profit\":%s,\"comment\":\"%s\",\"open_time\":\"%s\"}",
+         tk, sym, PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY ? "BUY" : "SELL",
+         Num(PositionGetDouble(POSITION_VOLUME), 2), Num(PositionGetDouble(POSITION_PRICE_OPEN), digits),
+         Num(PositionGetDouble(POSITION_PRICE_CURRENT), digits), Num(PositionGetDouble(POSITION_SL), digits),
+         Num(PositionGetDouble(POSITION_TP), digits), Num(PositionGetDouble(POSITION_SWAP), 2),
+         Num(PositionGetDouble(POSITION_PROFIT), 2), StringSubstr(cm, 0, 60), Iso((datetime)PositionGetInteger(POSITION_TIME)));
+   }
+   return out;
+}
+
 void Send()
 {
    string q = "";
@@ -64,14 +89,15 @@ void Send()
                         g_symbols[i], Num(t.bid, digits), Num(t.ask, digits), spread, digits, Iso(t.time));
    }
 
+   string pos = Positions();
    string body = StringFormat(
       "{\"login\":\"%I64d\",\"ea_version\":\"%s\",\"terminal_connected\":%s,\"trade_allowed\":%s,"
-      "\"balance\":%s,\"equity\":%s,\"margin_free\":%s,\"server_time\":\"%s\",\"quotes\":[%s]}",
+      "\"balance\":%s,\"equity\":%s,\"margin_free\":%s,\"server_time\":\"%s\",\"quotes\":[%s],\"positions\":[%s]}",
       AccountInfoInteger(ACCOUNT_LOGIN), EA_VERSION,
       Bool(TerminalInfoInteger(TERMINAL_CONNECTED) != 0),
       Bool(TerminalInfoInteger(TERMINAL_TRADE_ALLOWED) != 0 && AccountInfoInteger(ACCOUNT_TRADE_ALLOWED) != 0),
       Num(AccountInfoDouble(ACCOUNT_BALANCE), 2), Num(AccountInfoDouble(ACCOUNT_EQUITY), 2),
-      Num(AccountInfoDouble(ACCOUNT_MARGIN_FREE), 2), Iso(TimeTradeServer()), q);
+      Num(AccountInfoDouble(ACCOUNT_MARGIN_FREE), 2), Iso(TimeTradeServer()), q, pos);
 
    char data[], result[];
    string headers = "Content-Type: application/json\r\nX-Nexora-Token: " + InpToken + "\r\n", resHeaders;
