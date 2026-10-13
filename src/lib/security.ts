@@ -1,4 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
+import { useNavigate, useRouter } from "@tanstack/react-router";
+import { toast } from "sonner";
 
 export type PasswordIssue = "TOO_SHORT" | "NO_LOWER" | "NO_UPPER" | "NO_DIGIT" | "NO_SYMBOL" | "CONTAINS_EMAIL";
 
@@ -63,4 +66,22 @@ export async function runSignOut(d: SignOutDeps): Promise<SignOutResult> {
     error ??= e instanceof Error ? e.message : "NAVIGATION_FAILED";
   }
   return error ? { ok: false, error } : { ok: true };
+}
+
+/** React hook binding runSignOut to the app's query cache, router and Supabase session. */
+export function useSignOut() {
+  const qc = useQueryClient();
+  const router = useRouter();
+  const navigate = useNavigate();
+  return async (): Promise<SignOutResult> => {
+    const r = await runSignOut({
+      log: () => logSecurityEvent("AUTH_LOGOUT"),
+      authSignOut: () => supabase.auth.signOut(),
+      clearCache: async () => { await qc.cancelQueries(); qc.clear(); },
+      invalidate: () => router.invalidate(),
+      navigate: () => navigate({ to: "/auth", replace: true }),
+    });
+    if (!r.ok) toast.error(`Sign-out incomplete: ${r.error}`);
+    return r;
+  };
 }
