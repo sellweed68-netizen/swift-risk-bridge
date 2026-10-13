@@ -3,6 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { auditQuery, profileQuery, rolesQuery } from "@/lib/control-plane";
 import { PageHeader } from "@/components/workstream-placeholder";
 import { AdminOverview } from "@/components/admin-overview";
+import { LogOut } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useSignOut } from "@/lib/security";
+import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/more")({
   head: () => ({ meta: [{ title: "More — NEXORA MT5" }, { name: "description", content: "Profile, roles and audit trail." }] }),
@@ -14,6 +18,8 @@ function MorePage() {
   const { data: profile } = useQuery(profileQuery(user.id));
   const { data: roles = [] } = useQuery(rolesQuery(user.id));
   const { data: audit = [] } = useQuery(auditQuery(user.id, 50));
+  const signOut = useSignOut();
+  const { t } = useI18n();
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -29,6 +35,12 @@ function MorePage() {
             <p className="mt-2 truncate text-sm">{v}</p>
           </div>
         ))}
+      </section>
+      <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-5">
+        <p className="truncate text-sm text-muted-foreground">{user.email}</p>
+        <Button variant="destructive" onClick={() => void signOut()}>
+          <LogOut className="mr-2 h-4 w-4" />{t("nav.signOut")}
+        </Button>
       </section>
       {roles.includes("admin") && <AdminOverview />}
       <section className="rounded-lg border bg-card p-5">

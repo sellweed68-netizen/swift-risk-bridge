@@ -1,11 +1,11 @@
-import { createFileRoute, Link, Outlet, redirect, useNavigate, useRouter } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, redirect } from "@tanstack/react-router";
 import { Home, LineChart, Wallet, ArrowLeftRight, Cpu, BookOpen, MoreHorizontal, LogOut } from "lucide-react";
-import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { controlStateQuery, TRADING_MODES } from "@/lib/control-plane";
 import { cn } from "@/lib/utils";
 import { LanguageSwitch, useI18n, type TKey } from "@/lib/i18n";
-import { logSecurityEvent } from "@/lib/security";
+import { useSignOut } from "@/lib/security";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -29,21 +29,10 @@ const NAV = [
 
 function Shell() {
   const { user } = Route.useRouteContext();
-  const qc = useQueryClient();
-  const navigate = useNavigate();
-  const router = useRouter();
+  const signOut = useSignOut();
   const { data: cs } = useQuery(controlStateQuery(user.id));
   const { t } = useI18n();
   const mode = TRADING_MODES.find((m) => m.value === cs?.trading_mode);
-
-  async function signOut() {
-    await logSecurityEvent("AUTH_LOGOUT");
-    await qc.cancelQueries();
-    qc.clear();
-    await supabase.auth.signOut();
-    await router.invalidate();
-    navigate({ to: "/auth", replace: true });
-  }
 
   return (
     <div className="min-h-screen bg-background text-foreground md:flex">
@@ -60,7 +49,7 @@ function Shell() {
         </nav>
         <div className="border-t p-3 text-xs">
           <p className="truncate text-muted-foreground">{user.email}</p>
-          <button onClick={signOut} className="mt-2 flex items-center gap-2 text-muted-foreground hover:text-foreground">
+          <button onClick={() => void signOut()} className="mt-2 flex items-center gap-2 text-muted-foreground hover:text-foreground">
             <LogOut className="h-3.5 w-3.5" />{t("nav.signOut")}
           </button>
         </div>

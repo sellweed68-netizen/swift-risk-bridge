@@ -23,6 +23,17 @@ export const Route = createFileRoute("/_authenticated/home")({
   component: HomePage,
 });
 
+// Semantic compare of dotted numeric versions ("0.10" > "0.3"); unparseable → false.
+function versionAtLeast(v: string | null | undefined, min: string) {
+  if (!v || !/^\d+(\.\d+)*$/.test(v)) return false;
+  const a = v.split(".").map(Number), b = min.split(".").map(Number);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const d = (a[i] ?? 0) - (b[i] ?? 0);
+    if (d !== 0) return d > 0;
+  }
+  return true;
+}
+
 const RANK: Record<HealthState, number> = { HEALTHY: 3, DEGRADED: 2, OFFLINE: 1, UNKNOWN: 0 };
 
 function Dot({ s }: { s: HealthState }) {
@@ -61,6 +72,24 @@ function HomePage() {
     { name: "health.ai", state: "UNKNOWN" },
   ];
   const fresh = primaryHealth && connectionState(primaryHealth) === "HEALTHY";
+  // Positions are trusted only when the account heartbeat is fresh AND the EA (>= 0.3) sends a
+  // full position snapshot with every heartbeat, so a fresh heartbeat is account-level snapshot evidence.
+  const eaReportsPositions = versionAtLeast(primaryHealth?.ea_version, "0.3");
+  const { data: positions, isError: posError } = useQuery({
+    queryKey: ["broker_positions", "home", user.id, primary?.id],
+    enabled: Boolean(primary),
+    refetchInterval: 5_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.from("broker_positions").select("account_id,profit,swap")
+        .eq("user_id", user.id).eq("account_id", primary!.id).eq("status", "open");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+  const posLive = Boolean(fresh && eaReportsPositions && positions && !posError
+    && positions.every((p) => p.account_id === primary?.id));
+  const floating = posLive ? positions!.reduce((s, p) => s + Number(p.profit ?? 0) + Number(p.swap ?? 0), 0) : null;
+  const posNote = !primary ? null : !fresh ? t("pos.stale") : !eaReportsPositions ? t("pos.oldEa") : posError ? t("pos.stale") : null;
   const readOnly = roles.includes("viewer") && !roles.some((r) => r !== "viewer");
 
   async function update(patch: { trading_mode?: TradingMode; ai_trading_halted?: boolean }, ok: string) {
@@ -115,8 +144,8 @@ function HomePage() {
         {[
           [t("home.account"), primary ? primary.label : t("home.noAccount")],
           [t("home.equity"), fresh ? formatMoney(primaryHealth.equity, primary?.currency) : "—"],
-          [t("home.dailyPl"), "—"],
-          [t("home.positions"), "—"],
+          [t("pos.floating"), posLive ? formatMoney(floating, primary?.currency) : "—"],
+          [t("home.positions"), posLive ? String(positions!.length) : "—"],
         ].map(([k, v]) => (
           <div key={k} className="bg-card p-5">
             <p className="text-xs uppercase tracking-wider text-muted-foreground">{k}</p>
@@ -124,6 +153,7 @@ function HomePage() {
           </div>
         ))}
       </section>
+      {posNote && <p className="mt-2 text-xs text-muted-foreground">{posNote}</p>}
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         <section className="rounded-lg border bg-card p-5 lg:col-span-2">
