@@ -56,7 +56,7 @@ describe("indicators — boundaries and rejection", () => {
     expect(calculateEMA(bad, 1)).toEqual({ ok: false, error: "DUPLICATE_TIMESTAMP", index: 1 });
   });
   it("rejects out-of-order timestamps (no silent re-sort)", () => {
-    expect(calculateATR([BARS[1]!, BARS[0]], 1)).toEqual({ ok: false, error: "UNSORTED_TIMESTAMPS", index: 1 });
+    expect(calculateATR([BARS[1]!, BARS[0]!], 1)).toEqual({ ok: false, error: "UNSORTED_TIMESTAMPS", index: 1 });
   });
   it("rejects malformed OHLC", () => {
     expect(calculateEMA([{ ...BARS[0]!, h: 90 }], 1)).toMatchObject({ ok: false, error: "MALFORMED_OHLC" });
