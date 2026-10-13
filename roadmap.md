@@ -44,3 +44,5 @@ AI Marketplace, AI Tournament, Strategy Evolution, Autonomous Strategy Creation,
 - CP3 (Phase 3 DONE): per-account connector tokens (sha256-hashed, one active, issue/revoke RPC, audited); POST /api/public/mt5/ingest (zod-bounded, token verified in SECURITY DEFINER connector_ingest, login must match account, older ticks never overwrite newer); account_health + market_quotes (latest only); quality gate (heartbeat 15s/60s, quote 10s, spread cap 80 pts, bid/ask sanity) with unit tests; Markets page LIVE/NOT LIVE; bridge panel + public/ea/NexoraBridge.mq5 (report-only, never trades). Verified with simulated EA posts: valid/invalid token/login mismatch; GOLD.a→XAUUSD shown LIVE, wide spread NOT LIVE.
 - Known: bridge not yet tested in a real MT5 terminal (needs user's broker). Charts/candles + chart snapshots move to Phase 5.
 - NEXT: finish i18n on remaining pages, then Phase 6 NEXORA AI integration / Phase 5 analysis.
+
+- [x] Phase 10-B: ATR/EMA pure functions + tests, shared sign-out (desktop + mobile More), Home open positions/floating P/L (gated by fresh heartbeat + EA>=0.3). Daily P/L & used margin excluded (no deal history / margin field).
