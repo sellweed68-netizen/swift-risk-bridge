@@ -29,8 +29,9 @@ const pos = (n: unknown) => typeof n === "number" && Number.isFinite(n) && n > 0
 export function validateCandles(candles: readonly Candle[]): { ok: true } | { ok: false; error: IndicatorError; index: number } {
   let prev = -Infinity;
   for (let i = 0; i < candles.length; i++) {
-    const k = candles[i];
+    const k = candles[i]!;
     const ts = parseTimestamp(k?.t);
+    if (!k) return { ok: false, error: "MALFORMED_OHLC", index: i };
     if (ts === null) return { ok: false, error: "INVALID_TIMESTAMP", index: i };
     if (!pos(k.o) || !pos(k.h) || !pos(k.l) || !pos(k.c)
       || k.h < k.l || k.h < k.o || k.h < k.c || k.l > k.o || k.l > k.c) {
@@ -54,11 +55,11 @@ export function calculateEMA(candles: readonly Candle[], period: number): Indica
   if (candles.length < period) return { ok: true, values: out };
   const a = 2 / (period + 1);
   let sum = 0;
-  for (let i = 0; i < period; i++) sum += candles[i].c;
+  for (let i = 0; i < period; i++) sum += candles[i]!.c;
   let ema = sum / period;
   out[period - 1] = ema;
   for (let i = period; i < candles.length; i++) {
-    ema = candles[i].c * a + ema * (1 - a);
+    ema = candles[i]!.c * a + ema * (1 - a);
     out[i] = ema;
   }
   return { ok: true, values: out };
@@ -68,7 +69,7 @@ export function calculateEMA(candles: readonly Candle[], period: number): Indica
 export function trueRanges(candles: readonly Candle[]): number[] {
   return candles.map((k, i) => {
     if (i === 0) return k.h - k.l;
-    const pc = candles[i - 1].c;
+    const pc = candles[i - 1]!.c;
     return Math.max(k.h - k.l, Math.abs(k.h - pc), Math.abs(k.l - pc));
   });
 }
@@ -82,11 +83,11 @@ export function calculateATR(candles: readonly Candle[], period: number): Indica
   if (candles.length < period) return { ok: true, values: out };
   const tr = trueRanges(candles);
   let sum = 0;
-  for (let i = 0; i < period; i++) sum += tr[i];
+  for (let i = 0; i < period; i++) sum += tr[i]!;
   let atr = sum / period;
   out[period - 1] = atr;
   for (let i = period; i < candles.length; i++) {
-    atr = (atr * (period - 1) + tr[i]) / period;
+    atr = (atr * (period - 1) + tr[i]!) / period;
     out[i] = atr;
   }
   return { ok: true, values: out };
