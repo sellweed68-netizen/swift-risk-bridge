@@ -52,21 +52,21 @@ describe("indicators — boundaries and rejection", () => {
     expect(calculateATR(BARS, p)).toEqual({ ok: false, error: "INVALID_PERIOD" });
   });
   it("rejects duplicate timestamps", () => {
-    const bad = [BARS[0], { ...BARS[1], t: T(0) }];
+    const bad = [BARS[0]!, { ...BARS[1]!, t: T(0) }];
     expect(calculateEMA(bad, 1)).toEqual({ ok: false, error: "DUPLICATE_TIMESTAMP", index: 1 });
   });
   it("rejects out-of-order timestamps (no silent re-sort)", () => {
-    expect(calculateATR([BARS[1], BARS[0]], 1)).toEqual({ ok: false, error: "UNSORTED_TIMESTAMPS", index: 1 });
+    expect(calculateATR([BARS[1]!, BARS[0]], 1)).toEqual({ ok: false, error: "UNSORTED_TIMESTAMPS", index: 1 });
   });
   it("rejects malformed OHLC", () => {
-    expect(calculateEMA([{ ...BARS[0], h: 90 }], 1)).toMatchObject({ ok: false, error: "MALFORMED_OHLC" });
-    expect(calculateEMA([{ ...BARS[0], c: NaN }], 1)).toMatchObject({ ok: false, error: "MALFORMED_OHLC" });
-    expect(calculateEMA([{ ...BARS[0], l: 0 }], 1)).toMatchObject({ ok: false, error: "MALFORMED_OHLC" });
+    expect(calculateEMA([{ ...BARS[0]!, h: 90 }], 1)).toMatchObject({ ok: false, error: "MALFORMED_OHLC" });
+    expect(calculateEMA([{ ...BARS[0]!, c: NaN }], 1)).toMatchObject({ ok: false, error: "MALFORMED_OHLC" });
+    expect(calculateEMA([{ ...BARS[0]!, l: 0 }], 1)).toMatchObject({ ok: false, error: "MALFORMED_OHLC" });
   });
   it("rejects ambiguous timestamps", () => {
     expect(parseTimestamp("2026-01-01T00:00:00")).toBeNull(); // no timezone
     expect(parseTimestamp("garbage")).toBeNull();
     expect(parseTimestamp(1_700_000_000_000)).toBe(1_700_000_000_000);
-    expect(calculateEMA([{ ...BARS[0], t: "2026-01-01" }], 1)).toMatchObject({ error: "INVALID_TIMESTAMP" });
+    expect(calculateEMA([{ ...BARS[0]!, t: "2026-01-01" }], 1)).toMatchObject({ error: "INVALID_TIMESTAMP" });
   });
 });
