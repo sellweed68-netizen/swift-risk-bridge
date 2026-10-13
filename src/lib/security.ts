@@ -29,3 +29,38 @@ export async function logSecurityEvent(action: SecurityEvent, method?: string) {
     /* ignore */
   }
 }
+
+export type SignOutDeps = {
+  log: () => Promise<unknown>;
+  clearCache: () => Promise<void> | void;
+  authSignOut: () => Promise<{ error: { message: string } | null }>;
+  invalidate: () => Promise<unknown>;
+  navigate: () => unknown;
+  logTimeoutMs?: number;
+};
+export type SignOutResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Single logout pipeline for every entry point. Audit logging is time-boxed and can never block;
+ * cache cleanup, router invalidation and navigation always run; ok=true only if auth sign-out succeeded.
+ */
+export async function runSignOut(d: SignOutDeps): Promise<SignOutResult> {
+  await Promise.race([
+    d.log().catch(() => undefined),
+    new Promise((r) => setTimeout(r, d.logTimeoutMs ?? 2_000)),
+  ]);
+  let error: string | undefined;
+  try {
+    const res = await d.authSignOut();
+    if (res?.error) error = res.error.message;
+  } catch (e) {
+    error = e instanceof Error ? e.message : "SIGN_OUT_FAILED";
+  }
+  try { await d.clearCache(); } catch { /* local cleanup is best-effort */ }
+  try { await d.invalidate(); } catch { /* never skip navigation */ }
+  try { d.navigate(); } catch (e) {
+    if (typeof window !== "undefined") window.location.assign("/auth");
+    error ??= e instanceof Error ? e.message : "NAVIGATION_FAILED";
+  }
+  return error ? { ok: false, error } : { ok: true };
+}
