@@ -1,12 +1,12 @@
 //+------------------------------------------------------------------+
-//| NexoraBridge.mq5 — NEXORA MT5 execution bridge (v0.3)          |
+//| NexoraBridge.mq5 — NEXORA MT5 execution bridge (v0.4)          |
 //| Sends heartbeat, account snapshot and quotes to NEXORA MT5.       |
 //| Execution is OFF unless InpExecute=true. Orders come only from    |
 //| NEXORA approvals; the EA never resends an unclear order.          |
 //| Your MT5 password is never read or sent.                          |
 //+------------------------------------------------------------------+
 #property copyright "NEXORA MT5"
-#property version   "0.30"
+#property version   "0.40"
 #include <Trade/Trade.mqh>
 #property strict
 
@@ -16,9 +16,15 @@ input string InpSymbols  = "XAUUSD";                                  // Broker 
 input int    InpSeconds  = 5;                                         // Report interval (seconds, 2-60)
 input bool   InpExecute  = false;                                     // Execute NEXORA-approved orders (off = report-only)
 
-#define EA_VERSION "0.3.0"
+#define EA_VERSION "0.4.0"
+#define MAX_POSITIONS 150
 string g_symbols[];
 int    g_fail = 0;
+// Session fencing: the server issues g_epoch on SESSION_INIT; every report carries it.
+string g_instance = "";   // stable per terminal+login (survives EA reload)
+string g_nonce    = "";   // new per EA start; a retry reuses it (idempotent)
+long   g_epoch    = 0;
+long   g_seq      = 0;    // monotonic snapshot sequence within the epoch
 
 int OnInit()
 {
@@ -31,13 +37,30 @@ int OnInit()
       StringTrimLeft(g_symbols[i]); StringTrimRight(g_symbols[i]);
       SymbolSelect(g_symbols[i], true);
    }
+   string gv = "NEXORA_INST_" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN));
+   if(!GlobalVariableCheck(gv)) { MathSrand((uint)GetTickCount() ^ (uint)TimeLocal()); GlobalVariableSet(gv, (double)(1 + MathRand()) * 32768.0 + MathRand()); }
+   g_instance = "i" + IntegerToString((long)GlobalVariableGet(gv)) + "t" + IntegerToString((long)TerminalInfoInteger(TERMINAL_BUILD));
+   g_nonce = "n" + IntegerToString((long)TimeLocal()) + "x" + IntegerToString((long)GetMicrosecondCount());
    EventSetTimer(MathMax(2, MathMin(60, InpSeconds)));
+   InitSession();
    Send();
    return INIT_SUCCEEDED;
 }
 
 void OnDeinit(const int reason) { EventKillTimer(); }
-void OnTimer() { Send(); if(InpExecute) PullOrders(); }
+void OnTimer() { if(g_epoch == 0) InitSession(); Send(); if(InpExecute && g_epoch > 0) PullOrders(); }
+
+// SESSION_INIT: retried with the same nonce until accepted; never reports without an epoch.
+void InitSession()
+{
+   string body = StringFormat("{\"action\":\"session_init\",\"login\":\"%I64d\",\"instance_id\":\"%s\",\"nonce\":\"%s\"}",
+                              AccountInfoInteger(ACCOUNT_LOGIN), g_instance, g_nonce);
+   int code; string res = Post(InpEndpoint, body, code);
+   int k = StringFind(res, "\"session_epoch\":");
+   if(code == 200 && k >= 0) { g_epoch = StringToInteger(StringSubstr(res, k + 16, 20)); g_seq = 0; Print("NEXORA: session ", g_epoch); }
+   else if(code == 409) Print("NEXORA: another terminal is active for this account; waiting");
+   else Print("NEXORA: session init failed ", code);
+}
 
 string Iso(datetime t)
 {
@@ -50,15 +73,19 @@ string Iso(datetime t)
 string Num(double v, int digits) { return DoubleToString(v, digits); }
 string Bool(bool b) { return b ? "true" : "false"; }
 
-// Open positions snapshot (read-only; the EA never modifies or closes them here).
-string Positions()
+// Open positions snapshot with completeness evidence (read-only; never modifies positions).
+// The server only reconciles when total_start == total_end == items, skipped == 0 and not truncated.
+string Positions(int &total_start, int &total_end, int &skipped, bool &truncated)
 {
    string out = "";
-   int n = MathMin(PositionsTotal(), 100);
+   skipped = 0;
+   total_start = PositionsTotal();
+   truncated = total_start > MAX_POSITIONS;
+   int n = MathMin(total_start, MAX_POSITIONS);
    for(int i = 0; i < n; i++)
    {
       ulong tk = PositionGetTicket(i);
-      if(tk == 0 || !PositionSelectByTicket(tk)) continue;
+      if(tk == 0 || !PositionSelectByTicket(tk)) { skipped++; continue; }
       string sym = PositionGetString(POSITION_SYMBOL);
       int digits = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
       string cm = PositionGetString(POSITION_COMMENT);
@@ -72,6 +99,7 @@ string Positions()
          Num(PositionGetDouble(POSITION_TP), digits), Num(PositionGetDouble(POSITION_SWAP), 2),
          Num(PositionGetDouble(POSITION_PROFIT), 2), StringSubstr(cm, 0, 60), Iso((datetime)PositionGetInteger(POSITION_TIME)));
    }
+   total_end = PositionsTotal();
    return out;
 }
 
@@ -89,15 +117,20 @@ void Send()
                         g_symbols[i], Num(t.bid, digits), Num(t.ask, digits), spread, digits, Iso(t.time));
    }
 
-   string pos = Positions();
+   if(g_epoch == 0) return;   // no fenced session yet: report nothing
+   int ts, te, sk; bool tr;
+   string pos = Positions(ts, te, sk, tr);
+   g_seq++;
+   string snap = StringFormat("{\"seq\":%I64d,\"total_start\":%d,\"total_end\":%d,\"skipped\":%d,\"truncated\":%s,\"items\":[%s]}",
+                              g_seq, ts, te, sk, Bool(tr), pos);
    string body = StringFormat(
-      "{\"login\":\"%I64d\",\"ea_version\":\"%s\",\"terminal_connected\":%s,\"trade_allowed\":%s,"
-      "\"balance\":%s,\"equity\":%s,\"margin_free\":%s,\"server_time\":\"%s\",\"quotes\":[%s],\"positions\":[%s]}",
-      AccountInfoInteger(ACCOUNT_LOGIN), EA_VERSION,
+      "{\"login\":\"%I64d\",\"ea_version\":\"%s\",\"session_epoch\":%I64d,\"instance_id\":\"%s\",\"terminal_connected\":%s,\"trade_allowed\":%s,"
+      "\"balance\":%s,\"equity\":%s,\"margin_free\":%s,\"server_time\":\"%s\",\"quotes\":[%s],\"snapshot\":%s}",
+      AccountInfoInteger(ACCOUNT_LOGIN), EA_VERSION, g_epoch, g_instance,
       Bool(TerminalInfoInteger(TERMINAL_CONNECTED) != 0),
       Bool(TerminalInfoInteger(TERMINAL_TRADE_ALLOWED) != 0 && AccountInfoInteger(ACCOUNT_TRADE_ALLOWED) != 0),
       Num(AccountInfoDouble(ACCOUNT_BALANCE), 2), Num(AccountInfoDouble(ACCOUNT_EQUITY), 2),
-      Num(AccountInfoDouble(ACCOUNT_MARGIN_FREE), 2), Iso(TimeTradeServer()), q, pos);
+      Num(AccountInfoDouble(ACCOUNT_MARGIN_FREE), 2), Iso(TimeTradeServer()), q, snap);
 
    char data[], result[];
    string headers = "Content-Type: application/json\r\nX-Nexora-Token: " + InpToken + "\r\n", resHeaders;
@@ -105,6 +138,8 @@ void Send()
    ResetLastError();
    int code = WebRequest("POST", InpEndpoint, headers, 5000, data, result, resHeaders);
    if(code == 200) { if(g_fail > 0) Print("NEXORA: reconnected"); g_fail = 0; return; }
+   if(code == 409) { Print("NEXORA: session superseded or stale; re-initialising"); g_epoch = 0;
+                     g_nonce = "n" + IntegerToString((long)TimeLocal()) + "x" + IntegerToString((long)GetMicrosecondCount()); return; }
    g_fail++;
    if(code == -1) Print("NEXORA: WebRequest failed (", GetLastError(), "). Allow the URL in Tools > Options > Expert Advisors.");
    else Print("NEXORA: server replied ", code, " ", CharArrayToString(result));

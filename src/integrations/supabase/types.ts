@@ -17,14 +17,24 @@ export type Database = {
       account_health: {
         Row: {
           account_id: string
+          active_instance_id: string | null
           balance: number | null
           broker_server_time: string | null
           ea_version: string | null
           equity: number | null
           id: string
           last_heartbeat_at: string
+          last_init_nonce: string | null
+          last_positions_seq: number
+          last_positions_snapshot_at: string | null
           margin_free: number | null
+          positions_count: number | null
+          positions_reported_total: number | null
           reported_login: string | null
+          session_epoch: number
+          snapshot_checked_at: string | null
+          snapshot_reject_reason: string | null
+          snapshot_status: string
           terminal_connected: boolean
           trade_allowed: boolean
           updated_at: string
@@ -32,14 +42,24 @@ export type Database = {
         }
         Insert: {
           account_id: string
+          active_instance_id?: string | null
           balance?: number | null
           broker_server_time?: string | null
           ea_version?: string | null
           equity?: number | null
           id?: string
           last_heartbeat_at: string
+          last_init_nonce?: string | null
+          last_positions_seq?: number
+          last_positions_snapshot_at?: string | null
           margin_free?: number | null
+          positions_count?: number | null
+          positions_reported_total?: number | null
           reported_login?: string | null
+          session_epoch?: number
+          snapshot_checked_at?: string | null
+          snapshot_reject_reason?: string | null
+          snapshot_status?: string
           terminal_connected?: boolean
           trade_allowed?: boolean
           updated_at?: string
@@ -47,14 +67,24 @@ export type Database = {
         }
         Update: {
           account_id?: string
+          active_instance_id?: string | null
           balance?: number | null
           broker_server_time?: string | null
           ea_version?: string | null
           equity?: number | null
           id?: string
           last_heartbeat_at?: string
+          last_init_nonce?: string | null
+          last_positions_seq?: number
+          last_positions_snapshot_at?: string | null
           margin_free?: number | null
+          positions_count?: number | null
+          positions_reported_total?: number | null
           reported_login?: string | null
+          session_epoch?: number
+          snapshot_checked_at?: string | null
+          snapshot_reject_reason?: string | null
+          snapshot_status?: string
           terminal_connected?: boolean
           trade_allowed?: boolean
           updated_at?: string

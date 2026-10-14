@@ -8,6 +8,13 @@
       "when": 1791712737722,
       "tag": "0000_phase10_positions_reconciliation",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791938856717,
+      "tag": "0001_phase10c_position_snapshot_integrity",
+      "breakpoints": true
     }
   ]
 }
