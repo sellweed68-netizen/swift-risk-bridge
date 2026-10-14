@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { connectionState, healthQuery } from "@/lib/market-data";
+import { healthQuery, positionFreshness, versionAtLeast } from "@/lib/market-data";
 import { Badge } from "@/components/ui/badge";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -23,8 +23,11 @@ export function PositionsPanel({ userId }: { userId: string }) {
   const open = rows.filter((r) => r.status === "open");
   const closed = rows.filter((r) => r.status === "closed").slice(0, 10);
   const floating = open.reduce((s, r) => s + Number(r.profit ?? 0) + Number(r.swap ?? 0), 0);
-  const anyOffline = open.some((r) => connectionState(health.find((h) => h.account_id === r.account_id)) === "OFFLINE");
-  const oldEa = health.length > 0 && health.every((h) => !h.ea_version || h.ea_version < "0.3");
+  // Per-account freshness from server-verified snapshots only (never from heartbeat alone).
+  const fresh = (accountId: string) => positionFreshness(health.find((h) => h.account_id === accountId));
+  const anyNotLive = open.some((r) => fresh(r.account_id) !== "LIVE");
+  const anyUnverified = health.some((h) => positionFreshness(h) === "UNVERIFIED");
+  const oldEa = health.length > 0 && health.every((h) => !versionAtLeast(h.ea_version, "0.4"));
 
   return (
     <section className="space-y-3">
@@ -37,7 +40,8 @@ export function PositionsPanel({ userId }: { userId: string }) {
         )}
       </div>
       {oldEa && <p className="text-xs text-muted-foreground">{t("pos.oldEa")}</p>}
-      {anyOffline && <p className="text-xs text-destructive">{t("pos.stale")}</p>}
+      {anyUnverified && <p className="text-xs text-destructive">{t("pos.unverified")}</p>}
+      {anyNotLive && <p className="text-xs text-destructive">{t("pos.stale")}</p>}
       {open.length === 0 ? <p className="text-sm text-muted-foreground">{t("pos.none")}</p> : (
         <div className="overflow-x-auto rounded-lg border border-border">
           <table className="w-full text-sm">

@@ -16,23 +16,13 @@ import {
 import { cn } from "@/lib/utils";
 import { useI18n, type TKey } from "@/lib/i18n";
 import { accountsQuery, formatMoney } from "@/lib/accounts";
-import { connectionState, healthQuery, quoteQuality, quotesQuery } from "@/lib/market-data";
+import { connectionState, healthQuery, positionFreshness, quoteQuality, quotesQuery, versionAtLeast } from "@/lib/market-data";
 
 export const Route = createFileRoute("/_authenticated/home")({
   head: () => ({ meta: [{ title: "Home — NEXORA MT5" }, { name: "description", content: "Connection, account, and AI trading status." }] }),
   component: HomePage,
 });
 
-// Semantic compare of dotted numeric versions ("0.10" > "0.3"); unparseable → false.
-function versionAtLeast(v: string | null | undefined, min: string) {
-  if (!v || !/^\d+(\.\d+)*$/.test(v)) return false;
-  const a = v.split(".").map(Number), b = min.split(".").map(Number);
-  for (let i = 0; i < Math.max(a.length, b.length); i++) {
-    const d = (a[i] ?? 0) - (b[i] ?? 0);
-    if (d !== 0) return d > 0;
-  }
-  return true;
-}
 
 const RANK: Record<HealthState, number> = { HEALTHY: 3, DEGRADED: 2, OFFLINE: 1, UNKNOWN: 0 };
 
@@ -72,9 +62,10 @@ function HomePage() {
     { name: "health.ai", state: "UNKNOWN" },
   ];
   const fresh = primaryHealth && connectionState(primaryHealth) === "HEALTHY";
-  // Positions are trusted only when the account heartbeat is fresh AND the EA (>= 0.3) sends a
-  // full position snapshot with every heartbeat, so a fresh heartbeat is account-level snapshot evidence.
-  const eaReportsPositions = versionAtLeast(primaryHealth?.ea_version, "0.3");
+  // Positions are trusted only with a server-verified complete snapshot (EA >= 0.4) inside the
+  // freshness window; a fresh heartbeat alone is NOT position evidence.
+  const eaReportsPositions = versionAtLeast(primaryHealth?.ea_version, "0.4");
+  const posFresh = positionFreshness(primaryHealth);
   const { data: positions, isError: posError } = useQuery({
     queryKey: ["broker_positions", "home", user.id, primary?.id],
     enabled: Boolean(primary),
@@ -86,10 +77,10 @@ function HomePage() {
       return data ?? [];
     },
   });
-  const posLive = Boolean(fresh && eaReportsPositions && positions && !posError
+  const posLive = Boolean(fresh && eaReportsPositions && posFresh === "LIVE" && positions && !posError
     && positions.every((p) => p.account_id === primary?.id));
   const floating = posLive ? positions!.reduce((s, p) => s + Number(p.profit ?? 0) + Number(p.swap ?? 0), 0) : null;
-  const posNote = !primary ? null : !fresh ? t("pos.stale") : !eaReportsPositions ? t("pos.oldEa") : posError ? t("pos.stale") : null;
+  const posNote = !primary ? null : !fresh ? t("pos.stale") : !eaReportsPositions ? t("pos.oldEa") : posFresh === "UNVERIFIED" ? t("pos.unverified") : posFresh !== "LIVE" || posError ? t("pos.stale") : null;
   const readOnly = roles.includes("viewer") && !roles.some((r) => r !== "viewer");
 
   async function update(patch: { trading_mode?: TradingMode; ai_trading_halted?: boolean }, ok: string) {
