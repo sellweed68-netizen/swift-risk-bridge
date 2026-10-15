@@ -91,4 +91,35 @@ export function calculateATR(candles: readonly Candle[], period: number): Indica
     out[i] = atr;
   }
   return { ok: true, values: out };
+}export type MtfPeriod = 5 | 15 | 60;
+
+export function aggregateCandles(
+  m1Candles: Candle[],
+  targetPeriodMinutes: MtfPeriod,
+): Candle[] {
+  if (![5, 15, 60].includes(targetPeriodMinutes)) {
+    throw new Error(`Unsupported period: ${targetPeriodMinutes}`);
+  }
+  const size = targetPeriodMinutes * 60;
+  const out: Candle[] = [];
+  let prev = -Infinity;
+  for (const c of m1Candles) {
+    if (![c.time, c.open, c.high, c.low, c.close].every(Number.isFinite)) {
+      throw new Error("Invalid candle: non-finite value");
+    }
+    if (c.time <= prev) {
+      throw new Error("Candles must be strictly increasing by time");
+    }
+    prev = c.time;
+    const bucket = Math.floor(c.time / size) * size;
+    const last = out[out.length - 1];
+    if (last && last.time === bucket) {
+      last.high = Math.max(last.high, c.high);
+      last.low = Math.min(last.low, c.low);
+      last.close = c.close;
+    } else {
+      out.push({ ...c, time: bucket });
+    }
+  }
+  return out;
 }
